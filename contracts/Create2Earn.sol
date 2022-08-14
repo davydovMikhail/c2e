@@ -1,24 +1,29 @@
 // SPDX-License-Identifier: MIT
-// OpenZeppelin Contracts (last updated v4.7.0) (token/ERC20/ERC20.sol)
 
 pragma solidity ^0.8.0;
 
+import "@openzeppelin/contracts/access/AccessControl.sol";
 import "./IERC20.sol";
 import "./IERC20Metadata.sol";
-import "./Context.sol";
+import "./SafeMath.sol";
 
-contract ERC20 is Context, IERC20, IERC20Metadata {
+contract ERC20 is IERC20, IERC20Metadata, AccessControl {
+    using SafeMath for uint256;
+
+    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+    bytes32 public constant TOKEN_CONTROL_ROLE =
+        keccak256("TOKEN_CONTROL_ROLE");
+
     mapping(address => uint256) private _balances;
 
     mapping(address => mapping(address => uint256)) private _allowances;
 
     struct Tax {
-        uint tax;
+        uint256 tax;
         address recipient;
     }
 
     Tax[] public taxes;
-
 
     uint256 private _totalSupply;
 
@@ -28,6 +33,70 @@ contract ERC20 is Context, IERC20, IERC20Metadata {
     constructor(string memory name_, string memory symbol_) {
         _name = name_;
         _symbol = symbol_;
+        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _setupRole(ADMIN_ROLE, msg.sender);
+        _setupRole(TOKEN_CONTROL_ROLE, msg.sender);
+        _setRoleAdmin(TOKEN_CONTROL_ROLE, ADMIN_ROLE);
+    }
+
+    function addTaxRecipient(uint256 _tax, address _recipient)
+        external
+        returns (uint256 taxID)
+    {
+        require(
+            hasRole(TOKEN_CONTROL_ROLE, msg.sender),
+            "You don't have access rights."
+        );
+        taxes.push(Tax({tax: _tax, recipient: _recipient}));
+        taxID = taxes.length - 1;
+    }
+
+    function removeTaxRecipient(uint256 _taxID, address _recipient) external {
+        require(
+            hasRole(TOKEN_CONTROL_ROLE, msg.sender),
+            "You don't have access rights."
+        );
+        require(
+            taxes[_taxID].recipient == _recipient,
+            "Invalid recipient address."
+        );
+        require(_taxID < taxes.length, "ID does not exist.");
+        taxes[_taxID] = taxes[taxes.length - 1];
+        taxes.pop();
+    }
+
+    function setNewTaxValue(
+        uint256 _taxID,
+        address _recipient,
+        uint256 _tax
+    ) external {
+        require(
+            hasRole(TOKEN_CONTROL_ROLE, msg.sender),
+            "You don't have access rights."
+        );
+        require(
+            taxes[_taxID].recipient == _recipient,
+            "Invalid recipient address."
+        );
+        require(_taxID < taxes.length, "ID does not exist.");
+        taxes[_taxID].tax = _tax;
+    }
+
+    function setNewRecipient(
+        uint256 _taxID,
+        address _oldRecipient,
+        address _newRecipient
+    ) external {
+        require(
+            hasRole(TOKEN_CONTROL_ROLE, msg.sender),
+            "You don't have access rights."
+        );
+        require(
+            taxes[_taxID].recipient == _oldRecipient,
+            "Invalid recipient address."
+        );
+        require(_taxID < taxes.length, "ID does not exist.");
+        taxes[_taxID].recipient = _newRecipient;
     }
 
     /**
@@ -47,16 +116,6 @@ contract ERC20 is Context, IERC20, IERC20Metadata {
 
     /**
      * @dev Returns the number of decimals used to get its user representation.
-     * For example, if `decimals` equals `2`, a balance of `505` tokens should
-     * be displayed to a user as `5.05` (`505 / 10 ** 2`).
-     *
-     * Tokens usually opt for a value of 18, imitating the relationship between
-     * Ether and Wei. This is the value {ERC20} uses, unless this function is
-     * overridden;
-     *
-     * NOTE: This information is only used for _display_ purposes: it in
-     * no way affects any of the arithmetic of the contract, including
-     * {IERC20-balanceOf} and {IERC20-transfer}.
      */
     function decimals() public view virtual override returns (uint8) {
         return 18;
@@ -72,14 +131,25 @@ contract ERC20 is Context, IERC20, IERC20Metadata {
     /**
      * @dev See {IERC20-balanceOf}.
      */
-    function balanceOf(address account) public view virtual override returns (uint256) {
+    function balanceOf(address account)
+        public
+        view
+        virtual
+        override
+        returns (uint256)
+    {
         return _balances[account];
     }
 
     /**
      * @dev See {IERC20-transfer}.
      */
-    function transfer(address to, uint256 amount) public virtual override returns (bool) {
+    function transfer(address to, uint256 amount)
+        public
+        virtual
+        override
+        returns (bool)
+    {
         address owner = _msgSender();
         _transfer(owner, to, amount);
         return true;
@@ -88,14 +158,25 @@ contract ERC20 is Context, IERC20, IERC20Metadata {
     /**
      * @dev See {IERC20-allowance}.
      */
-    function allowance(address owner, address spender) public view virtual override returns (uint256) {
+    function allowance(address owner, address spender)
+        public
+        view
+        virtual
+        override
+        returns (uint256)
+    {
         return _allowances[owner][spender];
     }
 
     /**
      * @dev See {IERC20-approve}.
      */
-    function approve(address spender, uint256 amount) public virtual override returns (bool) {
+    function approve(address spender, uint256 amount)
+        public
+        virtual
+        override
+        returns (bool)
+    {
         address owner = _msgSender();
         _approve(owner, spender, amount);
         return true;
@@ -118,7 +199,11 @@ contract ERC20 is Context, IERC20, IERC20Metadata {
     /**
      * @dev Atomically increases the allowance granted to `spender` by the caller.
      */
-    function increaseAllowance(address spender, uint256 addedValue) public virtual returns (bool) {
+    function increaseAllowance(address spender, uint256 addedValue)
+        public
+        virtual
+        returns (bool)
+    {
         address owner = _msgSender();
         _approve(owner, spender, allowance(owner, spender) + addedValue);
         return true;
@@ -127,10 +212,17 @@ contract ERC20 is Context, IERC20, IERC20Metadata {
     /**
      * @dev Atomically decreases the allowance granted to `spender` by the caller.
      */
-    function decreaseAllowance(address spender, uint256 subtractedValue) public virtual returns (bool) {
+    function decreaseAllowance(address spender, uint256 subtractedValue)
+        public
+        virtual
+        returns (bool)
+    {
         address owner = _msgSender();
         uint256 currentAllowance = allowance(owner, spender);
-        require(currentAllowance >= subtractedValue, "ERC20: decreased allowance below zero");
+        require(
+            currentAllowance >= subtractedValue,
+            "ERC20: decreased allowance below zero"
+        );
         unchecked {
             _approve(owner, spender, currentAllowance - subtractedValue);
         }
@@ -150,11 +242,24 @@ contract ERC20 is Context, IERC20, IERC20Metadata {
         require(to != address(0), "ERC20: transfer to the zero address");
 
         uint256 fromBalance = _balances[from];
-        require(fromBalance >= amount, "ERC20: transfer amount exceeds balance");
+        require(
+            fromBalance >= amount,
+            "ERC20: transfer amount exceeds balance"
+        );
         unchecked {
             _balances[from] = fromBalance - amount;
         }
-        _balances[to] += amount;
+        uint256 _amount = amount;
+        for (uint256 i = 0; i < taxes.length; i++) {
+            Tax memory tax = taxes[i];
+            uint256 share = amount.div(100).mul(tax.tax);
+            unchecked {
+                _balances[tax.recipient] += share;
+                _amount -= share;
+            }
+        }
+
+        _balances[to] += _amount;
 
         emit Transfer(from, to, amount);
     }
@@ -172,13 +277,6 @@ contract ERC20 is Context, IERC20, IERC20Metadata {
     /**
      * @dev Destroys `amount` tokens from `account`, reducing the
      * total supply.
-     *
-     * Emits a {Transfer} event with `to` set to the zero address.
-     *
-     * Requirements:
-     *
-     * - `account` cannot be the zero address.
-     * - `account` must have at least `amount` tokens.
      */
     function _burn(address account, uint256 amount) internal virtual {
         require(account != address(0), "ERC20: burn from the zero address");
@@ -195,16 +293,6 @@ contract ERC20 is Context, IERC20, IERC20Metadata {
 
     /**
      * @dev Sets `amount` as the allowance of `spender` over the `owner` s tokens.
-     *
-     * This internal function is equivalent to `approve`, and can be used to
-     * e.g. set automatic allowances for certain subsystems, etc.
-     *
-     * Emits an {Approval} event.
-     *
-     * Requirements:
-     *
-     * - `owner` cannot be the zero address.
-     * - `spender` cannot be the zero address.
      */
     function _approve(
         address owner,
@@ -220,11 +308,6 @@ contract ERC20 is Context, IERC20, IERC20Metadata {
 
     /**
      * @dev Updates `owner` s allowance for `spender` based on spent `amount`.
-     *
-     * Does not update the allowance amount in case of infinite allowance.
-     * Revert if not enough allowance is available.
-     *
-     * Might emit an {Approval} event.
      */
     function _spendAllowance(
         address owner,
@@ -233,7 +316,10 @@ contract ERC20 is Context, IERC20, IERC20Metadata {
     ) internal virtual {
         uint256 currentAllowance = allowance(owner, spender);
         if (currentAllowance != type(uint256).max) {
-            require(currentAllowance >= amount, "ERC20: insufficient allowance");
+            require(
+                currentAllowance >= amount,
+                "ERC20: insufficient allowance"
+            );
             unchecked {
                 _approve(owner, spender, currentAllowance - amount);
             }
