@@ -7,7 +7,7 @@ import "./IERC20.sol";
 import "./IERC20Metadata.sol";
 import "./SafeMath.sol";
 
-contract ERC20 is IERC20, IERC20Metadata, AccessControl {
+contract Create2Earn is IERC20, IERC20Metadata, AccessControl {
     using SafeMath for uint256;
 
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
@@ -17,6 +17,8 @@ contract ERC20 is IERC20, IERC20Metadata, AccessControl {
     mapping(address => uint256) private _balances;
 
     mapping(address => mapping(address => uint256)) private _allowances;
+
+    mapping(address => bool) public excludedFromFee;
 
     struct Tax {
         uint256 tax;
@@ -30,13 +32,22 @@ contract ERC20 is IERC20, IERC20Metadata, AccessControl {
     string private _name;
     string private _symbol;
 
-    constructor(string memory name_, string memory symbol_) {
+    constructor(string memory name_, string memory symbol_, uint256 totalSupply_) {
         _name = name_;
         _symbol = symbol_;
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _setupRole(ADMIN_ROLE, msg.sender);
         _setupRole(TOKEN_CONTROL_ROLE, msg.sender);
         _setRoleAdmin(TOKEN_CONTROL_ROLE, ADMIN_ROLE);
+        _mint(msg.sender, totalSupply_);
+    }
+
+    function excludeFromFee(address _address) external {
+        require(
+            hasRole(TOKEN_CONTROL_ROLE, msg.sender),
+            "You don't have access rights."
+        );
+        excludedFromFee[_address] = !excludedFromFee[_address]; 
     }
 
     function addTaxRecipient(uint256 _tax, address _recipient)
@@ -250,12 +261,15 @@ contract ERC20 is IERC20, IERC20Metadata, AccessControl {
             _balances[from] = fromBalance - amount;
         }
         uint256 _amount = amount;
-        for (uint256 i = 0; i < taxes.length; i++) {
-            Tax memory tax = taxes[i];
-            uint256 share = amount.div(100).mul(tax.tax);
-            unchecked {
-                _balances[tax.recipient] += share;
-                _amount -= share;
+
+        if (!excludedFromFee[from] && !excludedFromFee[to]) {
+            for (uint256 i = 0; i < taxes.length; i++) {
+                Tax memory tax = taxes[i];
+                uint256 share = amount.div(100).mul(tax.tax);
+                unchecked {
+                    _balances[tax.recipient] += share;
+                    _amount -= share;
+                }
             }
         }
 
