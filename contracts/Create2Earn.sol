@@ -7,6 +7,9 @@ import "./IERC20.sol";
 import "./IERC20Metadata.sol";
 import "./SafeMath.sol";
 
+import "hardhat/console.sol";
+
+
 contract Create2Earn is IERC20, IERC20Metadata, AccessControl {
     using SafeMath for uint256;
 
@@ -67,11 +70,11 @@ contract Create2Earn is IERC20, IERC20Metadata, AccessControl {
             hasRole(TOKEN_CONTROL_ROLE, msg.sender),
             "You don't have access rights."
         );
+        require(_taxID < taxes.length, "ID does not exist.");
         require(
             taxes[_taxID].recipient == _recipient,
             "Invalid recipient address."
         );
-        require(_taxID < taxes.length, "ID does not exist.");
         taxes[_taxID] = taxes[taxes.length - 1];
         taxes.pop();
     }
@@ -85,11 +88,11 @@ contract Create2Earn is IERC20, IERC20Metadata, AccessControl {
             hasRole(TOKEN_CONTROL_ROLE, msg.sender),
             "You don't have access rights."
         );
+        require(_taxID < taxes.length, "ID does not exist.");
         require(
             taxes[_taxID].recipient == _recipient,
             "Invalid recipient address."
         );
-        require(_taxID < taxes.length, "ID does not exist.");
         taxes[_taxID].tax = _tax;
     }
 
@@ -102,12 +105,16 @@ contract Create2Earn is IERC20, IERC20Metadata, AccessControl {
             hasRole(TOKEN_CONTROL_ROLE, msg.sender),
             "You don't have access rights."
         );
+        require(_taxID < taxes.length, "ID does not exist.");
         require(
             taxes[_taxID].recipient == _oldRecipient,
             "Invalid recipient address."
         );
-        require(_taxID < taxes.length, "ID does not exist.");
         taxes[_taxID].recipient = _newRecipient;
+    }
+
+    function getLastTaxIdentifier() external view returns (uint) {
+        return taxes.length == 0 ? 0 : taxes.length - 1;
     }
 
     /**
@@ -263,7 +270,9 @@ contract Create2Earn is IERC20, IERC20Metadata, AccessControl {
         uint256 _amount = amount;
 
         if (!excludedFromFee[from] && !excludedFromFee[to]) {
+            console.log('Inside if block');
             for (uint256 i = 0; i < taxes.length; i++) {
+                console.log('Inside for block');
                 Tax memory tax = taxes[i];
                 uint256 share = amount.div(100).mul(tax.tax);
                 unchecked {
@@ -286,23 +295,6 @@ contract Create2Earn is IERC20, IERC20Metadata, AccessControl {
         _totalSupply += amount;
         _balances[account] += amount;
         emit Transfer(address(0), account, amount);
-    }
-
-    /**
-     * @dev Destroys `amount` tokens from `account`, reducing the
-     * total supply.
-     */
-    function _burn(address account, uint256 amount) internal virtual {
-        require(account != address(0), "ERC20: burn from the zero address");
-
-        uint256 accountBalance = _balances[account];
-        require(accountBalance >= amount, "ERC20: burn amount exceeds balance");
-        unchecked {
-            _balances[account] = accountBalance - amount;
-        }
-        _totalSupply -= amount;
-
-        emit Transfer(account, address(0), amount);
     }
 
     /**
